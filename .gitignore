@@ -1,0 +1,10 @@
+node_modules/
+.next/
+.env.local
+.env
+*.log
+.DS_Store
+
+# 默认情况下把数据排除（防止推到公共仓库）
+# 如果你想用 git 同步自己的笔记，就把下面这行删掉
+/data/
