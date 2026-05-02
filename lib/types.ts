@@ -58,3 +58,28 @@ export type GlobalAskResult = {
   relevant_note_ids: number[]; // 1-indexed，对应传入 notes 的顺序
   follow_ups: string[];
 };
+
+export type RelatedNote = {
+  note: Note;
+  reason: string;
+};
+
+export type InstantInsight = {
+  note: Note;
+  tags: string[];
+  people: string[];
+  possible_concepts: string[];
+  related_notes: RelatedNote[];
+};
+
+export type EchoResult = {
+  notes: RelatedNote[];
+};
+
+export type RecentInsights = {
+  note_count_7d: number;
+  top_tags: Array<{ name: string; count: number }>;
+  top_people: Array<{ name: string; count: number }>;
+  new_concepts: string[];
+  resurfaced_note: Note | null;
+};

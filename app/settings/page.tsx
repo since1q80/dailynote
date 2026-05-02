@@ -20,6 +20,9 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
   const [activeKey, setActiveKey] = useState<string>('');
+  const [importText, setImportText] = useState('');
+  const [importing, setImporting] = useState(false);
+  const [importedCount, setImportedCount] = useState<number | null>(null);
 
   useEffect(() => {
     fetch('/api/prompts')
@@ -78,6 +81,27 @@ export default function SettingsPage() {
 
   const active = prompts.find((p) => p.key === activeKey);
 
+  const importNotes = useCallback(async () => {
+    const text = importText.trim();
+    if (!text || importing) return;
+    setImporting(true);
+    setImportedCount(null);
+    try {
+      const res = await fetch('/api/import-notes', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setImportedCount(data.count ?? 0);
+        setImportText('');
+      }
+    } finally {
+      setImporting(false);
+    }
+  }, [importText, importing]);
+
   return (
     <div>
       <div className="mb-6 flex items-center gap-3">
@@ -105,6 +129,32 @@ export default function SettingsPage() {
             </button>
           ))}
         </div>
+      </div>
+
+      <div className="mb-6 rounded-2xl border border-line bg-paper p-4">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <p className="font-medium">{t('settings.import')}</p>
+            <p className="mt-1 text-[12px] text-ink-faint">{t('settings.importHelp')}</p>
+          </div>
+          <button
+            onClick={importNotes}
+            disabled={importing || !importText.trim()}
+            className="shrink-0 rounded-lg bg-accent px-4 py-1.5 text-[13px] text-white transition hover:bg-accent-dark disabled:opacity-50"
+          >
+            {importing
+              ? t('settings.importing')
+              : importedCount !== null
+              ? t('settings.imported', { n: importedCount })
+              : t('settings.importButton')}
+          </button>
+        </div>
+        <textarea
+          value={importText}
+          onChange={(e) => setImportText(e.target.value)}
+          placeholder={t('settings.importPlaceholder')}
+          className="h-28 w-full rounded-xl border border-line bg-canvas p-3 text-[13px] leading-6 outline-none placeholder:text-ink-ghost focus:border-accent/40"
+        />
       </div>
 
       {prompts.length === 0 ? (

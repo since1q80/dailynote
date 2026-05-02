@@ -2,7 +2,7 @@
  * compile.ts — 把 prompts / openai / storage 黏合起来的编排层
  *
  * 三个对外方法：
- *   saveNote(content)      — 保存 + 异步分类 + 触发概念编译
+ *   saveNote(content)      — 保存 + 后台分析
  *   compileConcept(title)  — 单独刷新某个概念卡
  *   askAboutConcept(...)   — 同步问答
  */
@@ -33,6 +33,7 @@ import {
   listPeople,
   getNotesForPerson,
   updateNoteTags,
+  readNote,
 } from './storage';
 import type {
   Note,
@@ -43,37 +44,76 @@ import type {
   GlobalAskResult,
   ExtractPeopleResult,
   ExtractTagsResult,
+  InstantInsight,
+  EchoResult,
+  RecentInsights,
+  RelatedNote,
 } from './types';
 
 /**
  * 完整保存流程：
  *   1. 写 md 文件（快，马上返回给 UI）
- *   2. 异步分类 + 触发相关概念重编译（fire-and-forget）
+ *   2. 后台提取轻量洞察 + 触发概念重编译（fire-and-forget）
  *
- * 返回最新的 note（分类可能还没完成，前端可以稍后刷新）
+ * 返回刚写入的 note + 当前可用的洞察
  */
-export async function saveNote(content: string): Promise<Note> {
+export async function saveNote(content: string): Promise<{ note: Note; insight: InstantInsight }> {
   const note = await writeNote(content);
-  // 人名 + 标签提取并行 await（都是 nano，快；保证跳转后 UI 立即正确）
-  await Promise.all([
-    extractPeopleFromNote(note).catch((err) =>
-      console.warn(`[compile] extractPeople(${note.id}) failed:`, err?.message ?? err)
-    ),
-    extractTagsFromNote(note).catch((err) =>
-      console.warn(`[compile] extractTags(${note.id}) failed:`, err?.message ?? err)
-    ),
-  ]);
-  // 分类 + 概念编译 fire-and-forget（慢，不阻塞跳转）
-  processNewNote(note).catch((err) =>
-    console.warn(`[compile] processNewNote(${note.id}) failed:`, err?.message ?? err)
+
+  processSavedNote(note).catch((err) =>
+    console.warn(`[compile] processSavedNote(${note.id}) failed:`, err?.message ?? err)
   );
-  return note;
+
+  return {
+    note,
+    insight: {
+      note,
+      tags: [],
+      people: [],
+      possible_concepts: [],
+      related_notes: await findRelatedNotes(note, { limit: 3, excludeIds: [note.id] }),
+    },
+  };
+}
+
+async function processSavedNote(note: Note): Promise<void> {
+  const [people, tags, classifyResult] = await Promise.all([
+    extractPeopleFromNote(note).catch((err) => {
+      console.warn(`[compile] extractPeople(${note.id}) failed:`, err?.message ?? err);
+      return [] as string[];
+    }),
+    extractTagsFromNote(note).catch((err) => {
+      console.warn(`[compile] extractTags(${note.id}) failed:`, err?.message ?? err);
+      return [] as string[];
+    }),
+    classifyNote(note).catch((err) => {
+      console.warn(`[compile] classifyNote(${note.id}) failed:`, err?.message ?? err);
+      return { matches: [] } as ClassifyResult;
+    }),
+  ]);
+
+  const possibleConcepts = conceptTitlesFromMatches(classifyResult);
+
+  if (possibleConcepts.length > 0) {
+    await attachConceptsAndCompileLater(note.id, possibleConcepts);
+  }
+
+  console.log(`[compile] processSavedNote(${note.id}) done`, {
+    people,
+    tags,
+    concepts: possibleConcepts,
+  });
 }
 
 export async function processNewNote(note: Note): Promise<void> {
-  const [existing, prompts] = await Promise.all([listConcepts(), getSystemPrompts()]);
+  const classifyResult = await classifyNote(note);
+  const touchedTitles = conceptTitlesFromMatches(classifyResult);
+  if (touchedTitles.length === 0) return; // "未分类" —— 尊严保留
+  await attachConceptsAndCompileLater(note.id, touchedTitles, { awaitCompile: true });
+}
 
-  // Step 1: 分类
+async function classifyNote(note: Note): Promise<ClassifyResult> {
+  const [existing, prompts] = await Promise.all([listConcepts(), getSystemPrompts()]);
   const classifyResult = await callJSON<ClassifyResult>({
     model: MODEL_FAST,
     system: prompts.CLASSIFY_SYSTEM,
@@ -81,34 +121,37 @@ export async function processNewNote(note: Note): Promise<void> {
     maxTokens: 600,
   });
   console.log(`[classify] note=${note.id} result=`, JSON.stringify(classifyResult));
-  const { matches } = classifyResult;
+  return classifyResult;
+}
 
-  if (!matches || matches.length === 0) {
-    return; // "未分类" —— 尊严保留
-  }
-
-  // Step 2: 保证概念存在并关联
-  const touchedTitles: string[] = [];
-  for (const m of matches) {
-    const title = (m.concept_title || '').trim();
-    if (!title) continue;
+async function attachConceptsAndCompileLater(
+  noteId: string,
+  titles: string[],
+  opts: { awaitCompile?: boolean } = {}
+): Promise<void> {
+  const touchedTitles = cleanTitles(titles);
+  for (const title of touchedTitles) {
     await ensureConcept(title);
-    touchedTitles.push(title);
   }
-  await updateNoteConcepts(note.id, touchedTitles);
+  await updateNoteConcepts(noteId, touchedTitles);
 
-  // Step 3: 对每个被触及的概念刷新 note_count，然后重新编译
   for (const t of touchedTitles) {
     await refreshConceptCount(t);
   }
-  for (const t of touchedTitles) {
-    await compileConcept(t).catch((err) =>
-      console.warn(`[compile] compileConcept(${t}) failed:`, err?.message ?? err)
-    );
-  }
+
+  const compileAll = async () => {
+    for (const t of touchedTitles) {
+      await compileConcept(t).catch((err) =>
+        console.warn(`[compile] compileConcept(${t}) failed:`, err?.message ?? err)
+      );
+    }
+  };
+
+  if (opts.awaitCompile) await compileAll();
+  else compileAll().catch((err) => console.warn('[compile] async compile failed:', err));
 }
 
-async function extractPeopleFromNote(note: Note): Promise<void> {
+async function extractPeopleFromNote(note: Note): Promise<string[]> {
   const prompts = await getSystemPrompts();
   const { people } = await callJSON<ExtractPeopleResult>({
     model: MODEL_FAST,
@@ -117,12 +160,14 @@ async function extractPeopleFromNote(note: Note): Promise<void> {
     maxTokens: 200,
   });
   console.log(`[people] note=${note.id} found=`, people);
-  for (const name of people || []) {
-    if (name.trim()) await addNoteIdToPerson(name.trim(), note.id);
+  const clean = cleanTitles(people || []).filter((name) => noteMentionsName(note.content, name));
+  for (const name of clean) {
+    await addNoteIdToPerson(name, note.id);
   }
+  return clean;
 }
 
-async function extractTagsFromNote(note: Note): Promise<void> {
+async function extractTagsFromNote(note: Note): Promise<string[]> {
   const [prompts, allNotes] = await Promise.all([getSystemPrompts(), listNotes()]);
   const existingTags = Array.from(
     new Set(allNotes.flatMap((n) => n.tags ?? []).filter((t) => t))
@@ -133,9 +178,11 @@ async function extractTagsFromNote(note: Note): Promise<void> {
     user: extractTagsUser(note.content, existingTags),
     maxTokens: 100,
   });
-  if (tags && tags.length > 0) {
-    await updateNoteTags(note.id, tags);
+  const clean = cleanTitles(tags || []);
+  if (clean.length > 0) {
+    await updateNoteTags(note.id, clean);
   }
+  return clean;
 }
 
 /** 编辑 note 内容后重新提取人名和标签（协调增删） */
@@ -161,7 +208,9 @@ export async function reprocessNoteAfterEdit(note: Note): Promise<void> {
     }).catch(() => ({ tags: [] as string[] })),
   ]);
 
-  const newPeople = (peopleResult.people || []).map((n) => n.trim()).filter(Boolean);
+  const newPeople = cleanTitles(peopleResult.people || []).filter((name) =>
+    noteMentionsName(note.content, name)
+  );
   const newTags = tagsResult.tags || [];
 
   // 协调人名：找出目前所有持有此 note_id 的人，移除不再提到的，添加新增的
@@ -262,6 +311,7 @@ export async function getHomeData(page = 1): Promise<{
   total_notes: number;
   page: number;
   total_pages: number;
+  insights: RecentInsights;
 }> {
   const [concepts, allNotes, people] = await Promise.all([
     listConcepts(),
@@ -286,6 +336,73 @@ export async function getHomeData(page = 1): Promise<{
     total_notes: allNotes.length,
     page,
     total_pages: Math.max(1, Math.ceil(allNotes.length / PAGE_SIZE)),
+    insights: getRecentInsightsFromData(allNotes, concepts, people, tags),
+  };
+}
+
+export async function getRecentInsights(): Promise<RecentInsights> {
+  const [concepts, allNotes, people] = await Promise.all([
+    listConcepts(),
+    listNotes(),
+    listPeople(),
+  ]);
+  const tagMap = new Map<string, number>();
+  for (const note of allNotes) {
+    for (const tag of note.tags ?? []) {
+      tagMap.set(tag, (tagMap.get(tag) ?? 0) + 1);
+    }
+  }
+  const tags = Array.from(tagMap.entries())
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count);
+  return getRecentInsightsFromData(allNotes, concepts, people, tags);
+}
+
+function getRecentInsightsFromData(
+  notes: Note[],
+  concepts: Concept[],
+  people: Awaited<ReturnType<typeof listPeople>>,
+  tags: { name: string; count: number }[]
+): RecentInsights {
+  const now = Date.now();
+  const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
+  const recent = notes.filter((n) => new Date(n.created_at).getTime() >= sevenDaysAgo);
+  const recentConcepts = new Set(recent.flatMap((n) => n.concepts ?? []));
+  const new_concepts = concepts
+    .filter((c) => recentConcepts.has(c.title))
+    .slice(0, 4)
+    .map((c) => c.title);
+  const oldEnough = notes.filter((n) => now - new Date(n.created_at).getTime() > 14 * 24 * 60 * 60 * 1000);
+
+  return {
+    note_count_7d: recent.length,
+    top_tags: tags.slice(0, 4),
+    top_people: people.slice(0, 4).map((p) => ({ name: p.name, count: p.note_ids.length })),
+    new_concepts,
+    resurfaced_note: oldEnough[Math.floor(Math.min(oldEnough.length - 1, 2))] ?? null,
+  };
+}
+
+export async function getEcho(content: string): Promise<EchoResult> {
+  if (content.trim().length < 12) return { notes: [] };
+  const ghost: Note = {
+    id: '__draft__',
+    content,
+    created_at: new Date().toISOString(),
+    concepts: [],
+    tags: [],
+  };
+  return { notes: await findRelatedNotes(ghost, { limit: 3, excludeIds: [] }) };
+}
+
+export async function getInstantInsight(note: Note): Promise<InstantInsight> {
+  const people = await listPeople();
+  return {
+    note,
+    tags: note.tags ?? [],
+    people: people.filter((p) => p.note_ids.includes(note.id)).map((p) => p.name),
+    possible_concepts: note.concepts ?? [],
+    related_notes: await findRelatedNotes(note, { limit: 3, excludeIds: [note.id] }),
   };
 }
 
@@ -391,4 +508,108 @@ export async function askAboutPerson(
     maxTokens: 2000,
   });
   return { ...result, notes };
+}
+
+type RelatedOptions = {
+  limit: number;
+  excludeIds: string[];
+};
+
+async function findRelatedNotes(note: Note, opts: RelatedOptions): Promise<RelatedNote[]> {
+  const [allNotes, people] = await Promise.all([listNotes(), listPeople()]);
+  const keywords = extractKeywords(note.content);
+  const notePeople = new Set(
+    people.filter((p) => p.note_ids.includes(note.id)).map((p) => p.name)
+  );
+
+  const scored = allNotes
+    .filter((n) => !opts.excludeIds.includes(n.id))
+    .map((candidate) => {
+      const reasons: string[] = [];
+      let score = 0;
+
+      const sharedTags = (candidate.tags ?? []).filter((t) => (note.tags ?? []).includes(t));
+      if (sharedTags.length > 0) {
+        score += sharedTags.length * 5;
+        reasons.push(`#${sharedTags.slice(0, 2).join(' #')}`);
+      }
+
+      const sharedConcepts = (candidate.concepts ?? []).filter((c) => (note.concepts ?? []).includes(c));
+      if (sharedConcepts.length > 0) {
+        score += sharedConcepts.length * 6;
+        reasons.push(sharedConcepts.slice(0, 2).join(' / '));
+      }
+
+      const candidatePeople = people
+        .filter((p) => p.note_ids.includes(candidate.id) && notePeople.has(p.name))
+        .map((p) => p.name);
+      if (candidatePeople.length > 0) {
+        score += candidatePeople.length * 4;
+        reasons.push(candidatePeople.slice(0, 2).join(' / '));
+      }
+
+      const candidateKeywords = extractKeywords(candidate.content);
+      const sharedKeywords = candidateKeywords.filter((kw) => keywords.includes(kw));
+      if (sharedKeywords.length > 0) {
+        score += Math.min(sharedKeywords.length, 5);
+        reasons.push(sharedKeywords.slice(0, 3).join(' / '));
+      }
+
+      const ageDays = (Date.now() - new Date(candidate.created_at).getTime()) / (24 * 60 * 60 * 1000);
+      if (ageDays > 7) score += 0.5;
+
+      return {
+        note: candidate,
+        reason: reasons.length > 0 ? reasons.slice(0, 2).join(' · ') : '内容相近',
+        score,
+      };
+    })
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, opts.limit);
+
+  return scored.map(({ note, reason }) => ({ note, reason }));
+}
+
+function cleanTitles(items: string[]): string[] {
+  return Array.from(new Set(items.map((s) => (s || '').trim()).filter(Boolean)));
+}
+
+function conceptTitlesFromMatches(result: ClassifyResult): string[] {
+  return cleanTitles(
+    (result.matches || [])
+      .filter((m) => Number(m.confidence) >= 0.7)
+      .map((m) => m.concept_title)
+  );
+}
+
+function noteMentionsName(content: string, name: string): boolean {
+  if (!name) return false;
+  return content.toLowerCase().includes(name.toLowerCase());
+}
+
+function extractKeywords(text: string): string[] {
+  const stopWords = new Set([
+    '什么', '说过', '说了', '有没有', '关于', '的', '了', '吗', '呢', '么', '我',
+    '你', '他', '她', '是', '在', '有', '和', '与', '都', '也', '不', '没', '会',
+    '能', '想', '要', '就', '还', '很', '这', '那', '一个', 'the', 'and', 'for',
+    'with', 'that', 'this', 'have', 'not', 'you', 'but', 'are', 'was', 'were',
+  ]);
+  return Array.from(
+    new Set(
+      text
+        .toLowerCase()
+        .replace(/[？。！，、""''【】《》?.,;:()[\]{}\s]/g, ' ')
+        .split(/\s+/)
+        .flatMap((chunk) => {
+          if (/^[\u4e00-\u9fff]+$/.test(chunk)) {
+            const words: string[] = [];
+            for (let i = 0; i < chunk.length - 1; i++) words.push(chunk.slice(i, i + 2));
+            return words;
+          }
+          return [chunk];
+        })
+        .filter((w) => w.length >= 2 && !stopWords.has(w))
+    )
+  ).slice(0, 40);
 }

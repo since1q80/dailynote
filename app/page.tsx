@@ -5,6 +5,7 @@ import { createT } from '@/lib/i18n';
 import SearchBox from './SearchBox';
 import NoteCard from './NoteCard';
 import PeopleSidebar from './PeopleSidebar';
+import DemoSeedButton from './DemoSeedButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,7 +26,7 @@ export default async function HomePage({
   searchParams: { page?: string };
 }) {
   const page = Math.max(1, parseInt(searchParams.page ?? '1', 10) || 1);
-  const { concepts, recent_notes, people, tags, total_notes, total_pages } = await getHomeData(page);
+  const { concepts, recent_notes, people, tags, total_notes, total_pages, insights } = await getHomeData(page);
   const lang = getLang();
   const t = createT(lang);
 
@@ -35,11 +36,48 @@ export default async function HomePage({
 
       {/* 右主区 */}
       <main className="min-w-0 flex-1">
-        <div className="mb-6 flex items-baseline justify-between">
-          <h1 className="text-2xl font-medium">{greeting(lang)}</h1>
-          <span className="text-xs text-ink-faint">
-            {t('home.stats', { notes: total_notes, concepts: concepts.length })}
-          </span>
+        <div className="mb-6">
+          <div className="mb-4 flex items-baseline justify-between">
+            <h1 className="text-2xl font-medium">{greeting(lang)}</h1>
+            <span className="text-xs text-ink-faint">
+              {t('home.stats', { notes: total_notes, concepts: concepts.length })}
+            </span>
+          </div>
+
+          {total_notes > 0 && (
+            <section className="rounded-2xl bg-canvas p-5">
+              <div className="mb-4 flex items-center justify-between">
+                <p className="text-[11px] uppercase tracking-wider text-ink-faint">{t('home.insights')}</p>
+                <p className="text-[13px] text-ink-soft">{t('home.insightNotes', { n: insights.note_count_7d })}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-4 text-[13px]">
+                <div>
+                  <p className="mb-1 text-[11px] text-ink-ghost">{t('home.insightTags')}</p>
+                  <p className="leading-6 text-ink-soft">
+                    {insights.top_tags.length > 0 ? insights.top_tags.map((x) => `#${x.name}`).join('  ') : '—'}
+                  </p>
+                </div>
+                <div>
+                  <p className="mb-1 text-[11px] text-ink-ghost">{t('home.insightPeople')}</p>
+                  <p className="leading-6 text-ink-soft">
+                    {insights.top_people.length > 0 ? insights.top_people.map((x) => x.name).join('  ') : '—'}
+                  </p>
+                </div>
+                <div>
+                  <p className="mb-1 text-[11px] text-ink-ghost">{t('home.insightConcepts')}</p>
+                  <p className="leading-6 text-ink-soft">
+                    {insights.new_concepts.length > 0 ? insights.new_concepts.join('  ') : '—'}
+                  </p>
+                </div>
+                {insights.resurfaced_note && (
+                  <div>
+                    <p className="mb-1 text-[11px] text-ink-ghost">{t('home.resurface')}</p>
+                    <p className="line-clamp-2 leading-6 text-ink-soft">{insights.resurfaced_note.content}</p>
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
         </div>
 
         <Link
@@ -125,10 +163,26 @@ export default async function HomePage({
         )}
 
         {concepts.length === 0 && recent_notes.length === 0 && (
-          <div className="mt-20 text-center text-sm text-ink-faint">
-            {t('home.empty').split('\n').map((line, i) => (
-              <span key={i}>{line}{i === 0 && <br />}</span>
-            ))}
+          <div className="mt-14 rounded-2xl border border-dashed border-line p-6 text-center">
+            <p className="text-sm text-ink-faint">
+              {t('home.empty').split('\n').map((line, i) => (
+                <span key={i}>{line}{i === 0 && <br />}</span>
+              ))}
+            </p>
+            <div className="mx-auto mt-5 max-w-md space-y-2 text-left text-[13px] leading-6 text-ink-soft">
+              <p>{t('home.emptyHint1')}</p>
+              <p>{t('home.emptyHint2')}</p>
+              <p>{t('home.emptyHint3')}</p>
+            </div>
+            <div className="mt-6 flex items-center justify-center gap-2">
+              <Link
+                href="/capture"
+                className="rounded-full bg-accent-dark px-4 py-2 text-[13px] font-medium text-paper transition hover:bg-accent"
+              >
+                {t('home.prompt')}
+              </Link>
+              <DemoSeedButton />
+            </div>
           </div>
         )}
       </main>

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { AskResult, Note } from '@/lib/types';
 import { formatDate, renderAnswer } from '@/lib/ui';
 import { useLanguage } from '@/app/LanguageProvider';
@@ -17,13 +17,23 @@ export default function PersonPage({ params }: { params: { name: string } }) {
   const [err, setErr] = useState<string | null>(null);
   const [answered, setAnswered] = useState<{ q: string; r: AskResult; notes: Note[] } | null>(null);
 
-  if (notes === null && !loadingNotes) {
+  useEffect(() => {
+    if (notes !== null || loadingNotes) return;
     setLoadingNotes(true);
     fetch(`/api/people/${encodeURIComponent(personName)}/notes`)
       .then((r) => r.json())
       .then((d) => { setNotes(d.notes || []); setLoadingNotes(false); })
       .catch(() => { setNotes([]); setLoadingNotes(false); });
-  }
+  }, [loadingNotes, notes, personName]);
+
+  const removeMention = async (noteId: string) => {
+    setNotes((prev) => prev ? prev.filter((n) => n.id !== noteId) : prev);
+    await fetch(`/api/people/${encodeURIComponent(personName)}/notes`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ note_id: noteId }),
+    });
+  };
 
   const ask = async (q: string) => {
     const trimmed = q.trim();
@@ -68,7 +78,15 @@ export default function PersonPage({ params }: { params: { name: string } }) {
           <div className="space-y-2">
             {notes.map((n) => (
               <div key={n.id} className="rounded-xl border border-line bg-paper p-4">
-                <p className="mb-1 text-[11px] text-ink-faint">{formatDate(n.created_at)}</p>
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <p className="text-[11px] text-ink-faint">{formatDate(n.created_at)}</p>
+                  <button
+                    onClick={() => removeMention(n.id)}
+                    className="text-[11px] text-ink-ghost transition hover:text-ink"
+                  >
+                    ×
+                  </button>
+                </div>
                 <p className="whitespace-pre-wrap text-[13px] leading-6">{n.content}</p>
               </div>
             ))}

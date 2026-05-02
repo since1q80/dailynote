@@ -14,6 +14,7 @@ export default function NoteCard({ note }: Props) {
   // view state
   const [content, setContent] = useState(note.content);
   const [expanded, setExpanded] = useState(false);
+  const [concepts, setConcepts] = useState<string[]>(note.concepts ?? []);
 
   // edit state
   const [editing, setEditing] = useState(false);
@@ -72,6 +73,15 @@ export default function NoteCard({ note }: Props) {
     });
   };
 
+  const saveConcepts = async (next: string[]) => {
+    setConcepts(next);
+    await fetch(`/api/notes/${note.id}/concepts`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ concepts: next }),
+    });
+  };
+
   const removeTag = (tag: string) => saveTags(tags.filter((t) => t !== tag));
 
   const commitNewTag = async () => {
@@ -86,16 +96,22 @@ export default function NoteCard({ note }: Props) {
       {/* Header row */}
       <div className="mb-1 flex items-baseline justify-between gap-3">
         <p className="text-[11px] text-ink-faint">{formatDate(note.created_at)}</p>
-        {note.concepts.length > 0 && (
+        {concepts.length > 0 && (
           <div className="flex flex-wrap gap-1">
-            {note.concepts.map((c) => (
-              <Link
+            {concepts.map((c) => (
+              <span
                 key={c}
-                href={`/concepts/${encodeURIComponent(c)}`}
-                className="rounded-full bg-accent-soft px-2 py-0.5 text-[10px] text-accent-dark"
+                className="group flex items-center gap-0.5 rounded-full bg-accent-soft px-2 py-0.5 text-[10px] text-accent-dark"
               >
-                {c}
-              </Link>
+                <Link href={`/concepts/${encodeURIComponent(c)}`}>{c}</Link>
+                <button
+                  onClick={() => saveConcepts(concepts.filter((x) => x !== c))}
+                  className="ml-0.5 text-[12px] leading-none opacity-0 transition hover:text-ink group-hover:opacity-100"
+                  aria-label={t('note.removeConcept', { concept: c })}
+                >
+                  ×
+                </button>
+              </span>
             ))}
           </div>
         )}

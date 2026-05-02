@@ -112,13 +112,13 @@ async function writeNoteFile(note: Note): Promise<void> {
 export async function updateNoteConcepts(id: string, concepts: string[]): Promise<void> {
   const note = await readNote(id);
   if (!note) return;
-  await writeNoteFile({ ...note, concepts });
+  await writeNoteFile({ ...note, concepts: cleanList(concepts) });
 }
 
 export async function updateNoteTags(id: string, tags: string[]): Promise<void> {
   const note = await readNote(id);
   if (!note) return;
-  await writeNoteFile({ ...note, tags });
+  await writeNoteFile({ ...note, tags: cleanList(tags) });
 }
 
 export async function updateNoteContent(id: string, content: string): Promise<Note | null> {
@@ -137,6 +137,10 @@ export async function getNotesForConcept(title: string): Promise<Note[]> {
 export async function getNotesForTag(tag: string): Promise<Note[]> {
   const all = await listNotes();
   return all.filter((n) => (n.tags ?? []).includes(tag));
+}
+
+function cleanList(items: string[]): string[] {
+  return Array.from(new Set(items.map((s) => s.trim()).filter(Boolean)));
 }
 
 // ─────────── concepts ───────────
@@ -280,7 +284,16 @@ export async function removeNoteIdFromPerson(name: string, noteId: string): Prom
   const existing = await readPerson(name);
   if (!existing) return;
   const note_ids = existing.note_ids.filter((id) => id !== noteId);
+  if (note_ids.length === 0) {
+    await fs.rm(path.join(PEOPLE_DIR, personFilename(name)), { force: true });
+    return;
+  }
   await writePerson({ ...existing, note_ids, updated_at: new Date().toISOString() });
+}
+
+export async function getPeopleForNote(noteId: string): Promise<Person[]> {
+  const people = await listPeople();
+  return people.filter((p) => p.note_ids.includes(noteId));
 }
 
 export async function listPeople(): Promise<Person[]> {
@@ -293,6 +306,7 @@ export async function listPeople(): Promise<Person[]> {
   );
   return people
     .filter((p): p is Person => p !== null)
+    .filter((p) => p.note_ids.length > 0)
     .sort((a, b) => b.note_ids.length - a.note_ids.length);
 }
 

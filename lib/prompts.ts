@@ -54,7 +54,8 @@ export const EXTRACT_PEOPLE_SYSTEM = `你是一个从私人笔记里提取人名
 1. 只提取真实的人名，比如 Peter、Gray、Victor。
 2. 不要提取职位头衔（CSA、RSE、manager）、公司名、或模糊指代（"同事"、"他"）。
 3. 如果一个名字既是职位也像人名，只有在上下文里明确指特定某个人时才提取。
-4. 没有人名就返回空数组。
+4. 返回的人名必须在原文中逐字出现；不要从示例、常识或上下文里补名字。
+5. 没有人名就返回空数组。
 
 返回 JSON，格式：
 { "people": ["人名1", "人名2"] }
@@ -389,7 +390,8 @@ Rules:
 1. Only extract real person names, e.g., Peter, Gray, Victor.
 2. Do not extract job titles (CSA, RSE, manager), company names, or vague references ("a colleague", "he", "she").
 3. If a name doubles as a title, only extract it when context clearly refers to a specific individual.
-4. If no names are found, return an empty array.
+4. Returned names must appear verbatim in the original note; do not add names from examples, general knowledge, or context.
+5. If no names are found, return an empty array.
 
 Return JSON, format:
 { "people": ["name1", "name2"] }

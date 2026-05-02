@@ -16,6 +16,7 @@ const dict: Record<string, Record<Lang, string>> = {
   'common.yourQuestion': { zh: '你问的', en: 'Your question' },
   'common.haventWritten': { zh: '你没写过的', en: "What you haven't written" },
   'common.followUp': { zh: '要不要接着问', en: 'Follow up' },
+  'common.done': { zh: '完成', en: 'Done' },
 
   // Greeting
   'greeting.lateNight': { zh: '夜深了', en: 'Late night' },
@@ -40,6 +41,17 @@ const dict: Record<string, Record<Lang, string>> = {
   'home.recent': { zh: '最近', en: 'Recent' },
   'home.noteCount': { zh: '{n} 条', en: '{n}' },
   'home.empty': { zh: '还是空的。\n点上面输入框，写下第一条。', en: "Nothing yet.\nClick the input above to write your first note." },
+  'home.insights': { zh: '近期洞察', en: 'Recent insights' },
+  'home.insightNotes': { zh: '最近 7 天写了 {n} 条', en: '{n} notes in the last 7 days' },
+  'home.insightTags': { zh: '高频标签', en: 'Frequent tags' },
+  'home.insightPeople': { zh: '常出现的人', en: 'People showing up' },
+  'home.insightConcepts': { zh: '最近主题', en: 'Recent topics' },
+  'home.resurface': { zh: '值得回看', en: 'Worth revisiting' },
+  'home.seedDemo': { zh: '载入示例数据', en: 'Load demo notes' },
+  'home.seeding': { zh: '载入中...', en: 'Loading...' },
+  'home.emptyHint1': { zh: '今天哪件事反复在脑子里出现？', en: 'What kept coming back to mind today?' },
+  'home.emptyHint2': { zh: '你和谁的沟通有一点卡住？', en: 'Which conversation felt a little stuck?' },
+  'home.emptyHint3': { zh: '最近有什么问题已经出现不止一次？', en: 'What problem has appeared more than once lately?' },
 
   // NoteCard
   'note.expand': { zh: '展开', en: 'Expand' },
@@ -50,6 +62,7 @@ const dict: Record<string, Record<Lang, string>> = {
   'note.addTag': { zh: '+ 标签', en: '+ Tag' },
   'note.tagPlaceholder': { zh: '标签名', en: 'tag name' },
   'note.removeTag': { zh: '删除标签 {tag}', en: 'Remove tag {tag}' },
+  'note.removeConcept': { zh: '移除主题 {concept}', en: 'Remove topic {concept}' },
 
   // SearchBox
   'search.placeholder': { zh: '昨天说过什么？/ 搜索某个话题...', en: 'What did you say yesterday? / Search a topic...' },
@@ -70,6 +83,16 @@ const dict: Record<string, Record<Lang, string>> = {
   'capture.polish': { zh: '润色', en: 'Polish' },
   'capture.polishing': { zh: '润色中…', en: 'Polishing…' },
   'capture.polishFailed': { zh: '润色失败：{msg}', en: 'Polish failed: {msg}' },
+  'capture.echo': { zh: '旧笔记回声', en: 'Echoes' },
+  'capture.insightTitle': { zh: '我看到了这些', en: 'Here is what I noticed' },
+  'capture.analyzing': { zh: '已保存，正在分析...', en: 'Saved, analyzing...' },
+  'capture.insightTags': { zh: '标签', en: 'Tags' },
+  'capture.insightPeople': { zh: '人物', en: 'People' },
+  'capture.insightConcepts': { zh: '可能主题', en: 'Possible topics' },
+  'capture.related': { zh: '相关旧笔记', en: 'Related old notes' },
+  'capture.writeAnother': { zh: '再写一条', en: 'Write another' },
+  'capture.backHome': { zh: '回首页', en: 'Back home' },
+  'capture.noInsight': { zh: '这条还比较独立，先放心收下。', en: 'This one seems standalone for now.' },
 
   // Concept detail
   'concept.notes': { zh: '{n} 条笔记', en: '{n} notes' },
@@ -110,6 +133,12 @@ const dict: Record<string, Record<Lang, string>> = {
   'settings.charCount': { zh: '{n} 字符', en: '{n} characters' },
   'settings.language': { zh: '语言', en: 'Language' },
   'settings.prompts': { zh: 'Prompts', en: 'Prompts' },
+  'settings.import': { zh: '批量导入', en: 'Bulk import' },
+  'settings.importHelp': { zh: '粘贴多条 Markdown 笔记，用单独一行 --- 或 ### 分隔。', en: 'Paste multiple Markdown notes, separated by a line containing --- or ###.' },
+  'settings.importPlaceholder': { zh: '第一条笔记...\n\n---\n\n第二条笔记...', en: 'First note...\n\n---\n\nSecond note...' },
+  'settings.importButton': { zh: '导入笔记', en: 'Import notes' },
+  'settings.importing': { zh: '导入中...', en: 'Importing...' },
+  'settings.imported': { zh: '已导入 {n} 条', en: 'Imported {n} notes' },
 
   // Prompt labels (shown in settings sidebar)
   'prompt.CLASSIFY_SYSTEM': { zh: '分类', en: 'Classify' },
