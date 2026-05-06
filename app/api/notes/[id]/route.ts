@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { updateNoteContent } from '@/lib/storage';
-import { reprocessNoteAfterEdit } from '@/lib/compile';
+import { deleteNoteEverywhere, reprocessNoteAfterEdit } from '@/lib/compile';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -23,6 +23,20 @@ export async function PUT(
     );
 
     return NextResponse.json({ note });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
+}
+
+export async function DELETE(
+  _req: Request,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const result = await deleteNoteEverywhere(params.id);
+    if (!result.ok) return NextResponse.json({ error: 'not found' }, { status: 404 });
+    return NextResponse.json(result);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return NextResponse.json({ error: msg }, { status: 500 });

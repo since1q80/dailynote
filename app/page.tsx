@@ -6,6 +6,8 @@ import SearchBox from './SearchBox';
 import NoteCard from './NoteCard';
 import PeopleSidebar from './PeopleSidebar';
 import DemoSeedButton from './DemoSeedButton';
+import RefreshButton from './RefreshButton';
+import ReviewQueue from './ReviewQueue';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,7 +28,17 @@ export default async function HomePage({
   searchParams: { page?: string };
 }) {
   const page = Math.max(1, parseInt(searchParams.page ?? '1', 10) || 1);
-  const { concepts, recent_notes, people, tags, total_notes, total_pages, insights } = await getHomeData(page);
+  const {
+    concepts,
+    recent_notes,
+    people,
+    tags,
+    total_notes,
+    total_pages,
+    insights,
+    review_items,
+    note_links_by_note_id,
+  } = await getHomeData(page);
   const lang = getLang();
   const t = createT(lang);
 
@@ -39,9 +51,12 @@ export default async function HomePage({
         <div className="mb-6">
           <div className="mb-4 flex items-baseline justify-between">
             <h1 className="text-2xl font-medium">{greeting(lang)}</h1>
-            <span className="text-xs text-ink-faint">
-              {t('home.stats', { notes: total_notes, concepts: concepts.length })}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-ink-faint">
+                {t('home.stats', { notes: total_notes, concepts: concepts.length })}
+              </span>
+              <RefreshButton />
+            </div>
           </div>
 
           {total_notes > 0 && (
@@ -75,9 +90,17 @@ export default async function HomePage({
                     <p className="line-clamp-2 leading-6 text-ink-soft">{insights.resurfaced_note.content}</p>
                   </div>
                 )}
+                {insights.recent_links.length > 0 && (
+                  <div className="col-span-2">
+                    <p className="mb-1 text-[11px] text-ink-ghost">{t('home.recentOutcome')}</p>
+                    <p className="line-clamp-2 leading-6 text-ink-soft">{insights.recent_links[0].reason}</p>
+                  </div>
+                )}
               </div>
             </section>
           )}
+
+          <ReviewQueue initialItems={review_items} />
         </div>
 
         <Link
@@ -122,7 +145,7 @@ export default async function HomePage({
             </div>
             <div className="space-y-2">
               {recent_notes.map((n) => (
-                <NoteCard key={n.id} note={n} />
+                <NoteCard key={n.id} note={n} links={note_links_by_note_id[n.id] || []} />
               ))}
             </div>
 

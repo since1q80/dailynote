@@ -13,6 +13,8 @@ export type Concept = {
   contradictions: string[];
   evolution: string | null;
   related: string[];
+  evidence_note_ids: string[];
+  evidence: Array<{ note_id: string; reason: string }>;
   note_count: number;
   updated_at: string;
 };
@@ -36,6 +38,63 @@ export type ClassifyResult = {
     concept_title: string;
     confidence: number;
     is_new: boolean;
+  }>;
+};
+
+export type Purpose = {
+  content: string;
+  updated_at: string;
+};
+
+export type NoteAnalysis = {
+  note_id: string;
+  subject: string;
+  object_people: string[];
+  event_summary: string;
+  emotion: string | null;
+  intent: string;
+  candidate_concepts: Array<{
+    concept_title: string;
+    confidence: number;
+    is_new: boolean;
+    reason: string;
+  }>;
+  evidence: string[];
+  confidence: number;
+  updated_at: string;
+};
+
+export type AnalyzeNoteResult = Omit<NoteAnalysis, 'note_id' | 'updated_at'>;
+
+export type ReviewItem = {
+  id: string;
+  note_id: string;
+  type: 'concept';
+  suggestion: string;
+  reason: string;
+  confidence: number;
+  created_at: string;
+  dismissed?: boolean;
+};
+
+export type NoteLinkType = 'follow_up' | 'outcome' | 'validated' | 'contradicts';
+
+export type NoteLink = {
+  id: string;
+  from_note_id: string;
+  to_note_id: string;
+  type: NoteLinkType;
+  reason: string;
+  confidence: number;
+  created_at: string;
+};
+
+export type DetectNoteLinksResult = {
+  links: Array<{
+    from_note_id: string;
+    type: NoteLinkType;
+    reason: string;
+    confidence: number;
   }>;
 };
 
@@ -82,4 +141,6 @@ export type RecentInsights = {
   top_people: Array<{ name: string; count: number }>;
   new_concepts: string[];
   resurfaced_note: Note | null;
+  review_count: number;
+  recent_links: Array<NoteLink & { from_note: Note | null; to_note: Note | null }>;
 };

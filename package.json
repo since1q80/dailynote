@@ -2,10 +2,15 @@
   "name": "dailynote",
   "version": "0.1.0",
   "private": true,
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "electron:dev": "DAILYNOTE_ELECTRON_DEV=1 electron .",
+    "desktop:dev": "npm run electron:dev",
+    "desktop:build": "npm run build && electron-builder --mac",
+    "desktop:pack": "npm run build && electron-builder --mac --dir"
   },
   "dependencies": {
     "gray-matter": "^4.0.3",
@@ -21,9 +26,38 @@
     "@types/react-dom": "^18.3.0",
     "autoprefixer": "^10.4.17",
     "dotenv": "^17.4.2",
+    "electron": "^41.5.0",
+    "electron-builder": "^26.8.1",
     "postcss": "^8.4.33",
     "tailwindcss": "^3.4.1",
     "tsx": "^4.21.0",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "wait-on": "^9.0.5"
+  },
+  "build": {
+    "appId": "com.dailynote.app",
+    "productName": "DailyNote",
+    "asar": false,
+    "electronDist": "node_modules/electron/dist",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "app/**/*",
+      "electron/**/*",
+      "lib/**/*",
+      "public/**/*",
+      ".next/**/*",
+      "next.config.mjs",
+      "package.json",
+      "node_modules/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        "dir",
+        "dmg"
+      ]
+    }
   }
 }

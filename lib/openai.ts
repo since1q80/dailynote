@@ -15,19 +15,24 @@ export const MODEL_FAST = 'gpt-5.4-nano';
 export const MODEL_SMART = 'gpt-5.4-mini';
 
 let _client: OpenAI | null = null;
+let _clientKey = '';
+let _clientProxy = '';
 
 function client(): OpenAI {
-  if (_client) return _client;
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     throw new Error(
       'OPENAI_API_KEY 未设置。复制 .env.example 到 .env.local 并填入你的 key。'
     );
   }
-  const httpAgent = process.env.HTTPS_PROXY
-    ? new HttpsProxyAgent(process.env.HTTPS_PROXY)
+  const proxy = process.env.HTTPS_PROXY || '';
+  if (_client && _clientKey === apiKey && _clientProxy === proxy) return _client;
+  const httpAgent = proxy
+    ? new HttpsProxyAgent(proxy)
     : undefined;
   _client = new OpenAI({ apiKey, httpAgent });
+  _clientKey = apiKey;
+  _clientProxy = proxy;
   return _client;
 }
 

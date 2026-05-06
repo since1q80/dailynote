@@ -1,15 +1,22 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import type { ComponentProps } from 'react';
 import type { Note } from '@/lib/types';
 import { formatDate } from '@/lib/ui';
 import { useLanguage } from './LanguageProvider';
+import NoteLinks from './NoteLinks';
 
-type Props = { note: Note };
+type Props = {
+  note: Note;
+  links?: ComponentProps<typeof NoteLinks>['links'];
+};
 
-export default function NoteCard({ note }: Props) {
+export default function NoteCard({ note, links = [] }: Props) {
   const { t } = useLanguage();
+  const router = useRouter();
 
   // view state
   const [content, setContent] = useState(note.content);
@@ -20,6 +27,7 @@ export default function NoteCard({ note }: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(note.content);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // tag state
@@ -27,6 +35,15 @@ export default function NoteCard({ note }: Props) {
   const [adding, setAdding] = useState(false);
   const [newTag, setNewTag] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!editing) {
+      setContent(note.content);
+      setDraft(note.content);
+    }
+    setConcepts(note.concepts ?? []);
+    setTags(note.tags ?? []);
+  }, [editing, note.content, note.concepts, note.tags]);
 
   const startEdit = () => {
     setDraft(content);
@@ -82,6 +99,18 @@ export default function NoteCard({ note }: Props) {
     });
   };
 
+  const deleteThisNote = async () => {
+    if (deleting) return;
+    if (!window.confirm(t('note.deleteConfirm'))) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/notes/${note.id}`, { method: 'DELETE' });
+      if (res.ok) router.refresh();
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const removeTag = (tag: string) => saveTags(tags.filter((t) => t !== tag));
 
   const commitNewTag = async () => {
@@ -96,8 +125,9 @@ export default function NoteCard({ note }: Props) {
       {/* Header row */}
       <div className="mb-1 flex items-baseline justify-between gap-3">
         <p className="text-[11px] text-ink-faint">{formatDate(note.created_at)}</p>
-        {concepts.length > 0 && (
-          <div className="flex flex-wrap gap-1">
+        <div className="flex items-center gap-2">
+          {concepts.length > 0 && (
+            <div className="flex flex-wrap justify-end gap-1">
             {concepts.map((c) => (
               <span
                 key={c}
@@ -113,8 +143,16 @@ export default function NoteCard({ note }: Props) {
                 </button>
               </span>
             ))}
-          </div>
-        )}
+            </div>
+          )}
+          <button
+            onClick={deleteThisNote}
+            disabled={deleting}
+            className="rounded-lg px-2 py-0.5 text-[11px] text-ink-ghost transition hover:bg-canvas hover:text-red-600 disabled:opacity-40"
+          >
+            {deleting ? t('note.deleting') : t('note.delete')}
+          </button>
+        </div>
       </div>
 
       {/* Content — view or edit */}
@@ -163,6 +201,8 @@ export default function NoteCard({ note }: Props) {
           )}
         </div>
       )}
+
+      <NoteLinks noteId={note.id} links={links} />
 
       {/* Tag row */}
       <div className="mt-2.5 flex flex-wrap items-center gap-1.5">

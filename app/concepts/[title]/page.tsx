@@ -23,6 +23,7 @@ export default async function ConceptDetailPage({
 
   const notes = await getNotesForConcept(title);
   const t = createT(getLang());
+  const noteById = new Map(notes.map((n) => [n.id, n]));
 
   return (
     <main>
@@ -85,6 +86,34 @@ export default async function ConceptDetailPage({
                 <span className="text-[14px] leading-6">{p}</span>
               </div>
             ))}
+          </div>
+        </section>
+      )}
+
+      {concept.evidence.length > 0 && (
+        <section className="mb-8">
+          <p className="mb-3 text-[11px] uppercase tracking-wider text-ink-faint">
+            {t('concept.evidence')}
+          </p>
+          <div className="space-y-2">
+            {concept.evidence.slice(0, 6).map((item) => {
+              const note = noteById.get(item.note_id);
+              return (
+                <div key={item.note_id} className="rounded-xl border border-line bg-paper p-3">
+                  <div className="mb-1 flex items-center justify-between gap-3">
+                    <p className="text-[11px] text-ink-faint">
+                      {note ? formatDate(note.created_at) : item.note_id}
+                    </p>
+                  </div>
+                  <p className="text-[12px] leading-5 text-ink-soft">{item.reason}</p>
+                  {note && (
+                    <p className="mt-1 line-clamp-2 text-[12px] leading-5 text-ink-faint">
+                      {note.content}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </section>
       )}

@@ -16,17 +16,47 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import matter from 'gray-matter';
-import type { Note, Concept, Person } from './types';
+import type { Note, Concept, Person, Purpose, NoteAnalysis, ReviewItem, NoteLink } from './types';
 
-const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), 'data');
-const NOTES_DIR = path.join(DATA_DIR, 'notes');
-const CONCEPTS_DIR = path.join(DATA_DIR, 'concepts');
-const PEOPLE_DIR = path.join(DATA_DIR, 'people');
+function dataDir(): string {
+  return process.env.DATA_DIR || path.join(process.cwd(), 'data');
+}
+
+function notesDir(): string {
+  return path.join(dataDir(), 'notes');
+}
+
+function conceptsDir(): string {
+  return path.join(dataDir(), 'concepts');
+}
+
+function peopleDir(): string {
+  return path.join(dataDir(), 'people');
+}
+
+function analysisDir(): string {
+  return path.join(dataDir(), 'analysis');
+}
+
+function reviewQueueDir(): string {
+  return path.join(dataDir(), 'review-queue');
+}
+
+function noteLinksDir(): string {
+  return path.join(dataDir(), 'note-links');
+}
+
+function purposeFile(): string {
+  return path.join(dataDir(), 'purpose.md');
+}
 
 async function ensureDirs(): Promise<void> {
-  await fs.mkdir(NOTES_DIR, { recursive: true });
-  await fs.mkdir(CONCEPTS_DIR, { recursive: true });
-  await fs.mkdir(PEOPLE_DIR, { recursive: true });
+  await fs.mkdir(notesDir(), { recursive: true });
+  await fs.mkdir(conceptsDir(), { recursive: true });
+  await fs.mkdir(peopleDir(), { recursive: true });
+  await fs.mkdir(analysisDir(), { recursive: true });
+  await fs.mkdir(reviewQueueDir(), { recursive: true });
+  await fs.mkdir(noteLinksDir(), { recursive: true });
 }
 
 // ─────────── note id & 文件名 ───────────
@@ -63,14 +93,14 @@ export async function writeNote(content: string): Promise<Note> {
     tags: [] as string[],
   };
   const body = matter.stringify(content.trim() + '\n', fm);
-  await fs.writeFile(path.join(NOTES_DIR, `${id}.md`), body, 'utf8');
+  await fs.writeFile(path.join(notesDir(), `${id}.md`), body, 'utf8');
   return { id, content: content.trim(), created_at, concepts: [], tags: [] };
 }
 
 export async function readNote(id: string): Promise<Note | null> {
   await ensureDirs();
   try {
-    const raw = await fs.readFile(path.join(NOTES_DIR, `${id}.md`), 'utf8');
+    const raw = await fs.readFile(path.join(notesDir(), `${id}.md`), 'utf8');
     const parsed = matter(raw);
     const fm = parsed.data as Partial<Note>;
     return {
@@ -87,7 +117,7 @@ export async function readNote(id: string): Promise<Note | null> {
 
 export async function listNotes(): Promise<Note[]> {
   await ensureDirs();
-  const files = await fs.readdir(NOTES_DIR);
+  const files = await fs.readdir(notesDir());
   const notes = await Promise.all(
     files
       .filter((f) => f.endsWith('.md'))
@@ -106,7 +136,7 @@ async function writeNoteFile(note: Note): Promise<void> {
     tags: note.tags,
   };
   const body = matter.stringify(note.content + '\n', fm);
-  await fs.writeFile(path.join(NOTES_DIR, `${note.id}.md`), body, 'utf8');
+  await fs.writeFile(path.join(notesDir(), `${note.id}.md`), body, 'utf8');
 }
 
 export async function updateNoteConcepts(id: string, concepts: string[]): Promise<void> {
@@ -127,6 +157,14 @@ export async function updateNoteContent(id: string, content: string): Promise<No
   const updated = { ...note, content: content.trim() };
   await writeNoteFile(updated);
   return updated;
+}
+
+export async function deleteNote(id: string): Promise<Note | null> {
+  const note = await readNote(id);
+  if (!note) return null;
+  await fs.rm(path.join(notesDir(), `${id}.md`), { force: true });
+  await fs.rm(path.join(analysisDir(), `${id}.md`), { force: true });
+  return note;
 }
 
 export async function getNotesForConcept(title: string): Promise<Note[]> {
@@ -152,6 +190,8 @@ type ConceptFrontmatter = {
   contradictions: string[];
   evolution: string | null;
   related: string[];
+  evidence_note_ids: string[];
+  evidence: Array<{ note_id: string; reason: string }>;
   note_count: number;
   updated_at: string;
 };
@@ -159,7 +199,7 @@ type ConceptFrontmatter = {
 export async function readConcept(title: string): Promise<Concept | null> {
   await ensureDirs();
   try {
-    const raw = await fs.readFile(path.join(CONCEPTS_DIR, conceptFilename(title)), 'utf8');
+    const raw = await fs.readFile(path.join(conceptsDir(), conceptFilename(title)), 'utf8');
     const parsed = matter(raw);
     const fm = parsed.data as Partial<ConceptFrontmatter>;
     return {
@@ -171,6 +211,8 @@ export async function readConcept(title: string): Promise<Concept | null> {
       contradictions: fm.contradictions || [],
       evolution: fm.evolution ?? null,
       related: fm.related || [],
+      evidence_note_ids: fm.evidence_note_ids || [],
+      evidence: fm.evidence || [],
       note_count: fm.note_count ?? 0,
       updated_at: fm.updated_at || new Date(0).toISOString(),
     };
@@ -188,12 +230,14 @@ export async function writeConcept(c: Concept): Promise<void> {
     contradictions: c.contradictions,
     evolution: c.evolution,
     related: c.related,
+    evidence_note_ids: c.evidence_note_ids || [],
+    evidence: c.evidence || [],
     note_count: c.note_count,
     updated_at: c.updated_at,
   };
   // 正文就是 synthesis，这样 Obsidian 打开直接就看到有用的东西
   const body = matter.stringify((c.synthesis || '').trim() + '\n', fm);
-  await fs.writeFile(path.join(CONCEPTS_DIR, conceptFilename(c.title)), body, 'utf8');
+  await fs.writeFile(path.join(conceptsDir(), conceptFilename(c.title)), body, 'utf8');
 }
 
 export async function ensureConcept(title: string): Promise<Concept> {
@@ -206,6 +250,8 @@ export async function ensureConcept(title: string): Promise<Concept> {
     contradictions: [],
     evolution: null,
     related: [],
+    evidence_note_ids: [],
+    evidence: [],
     note_count: 0,
     updated_at: new Date().toISOString(),
   };
@@ -215,7 +261,7 @@ export async function ensureConcept(title: string): Promise<Concept> {
 
 export async function listConcepts(): Promise<Concept[]> {
   await ensureDirs();
-  const files = await fs.readdir(CONCEPTS_DIR);
+  const files = await fs.readdir(conceptsDir());
   const concepts = await Promise.all(
     files
       .filter((f) => f.endsWith('.md'))
@@ -232,9 +278,197 @@ export async function refreshConceptCount(title: string): Promise<number> {
   const c = await readConcept(title);
   if (!c) return 0;
   c.note_count = notes.length;
+  c.evidence_note_ids = notes.map((n) => n.id);
   c.updated_at = new Date().toISOString();
   await writeConcept(c);
   return notes.length;
+}
+
+// ── Purpose ────────────────────────────────────────────────────────────────
+
+export async function readPurpose(): Promise<Purpose> {
+  await ensureDirs();
+  try {
+    const raw = await fs.readFile(purposeFile(), 'utf8');
+    const parsed = matter(raw);
+    return {
+      content: parsed.content.trim(),
+      updated_at: parsed.data.updated_at || new Date(0).toISOString(),
+    };
+  } catch {
+    return { content: '', updated_at: new Date(0).toISOString() };
+  }
+}
+
+export async function writePurpose(content: string): Promise<Purpose> {
+  await ensureDirs();
+  const purpose = { content: content.trim(), updated_at: new Date().toISOString() };
+  const body = matter.stringify(`${purpose.content}\n`, { updated_at: purpose.updated_at });
+  await fs.writeFile(purposeFile(), body, 'utf8');
+  return purpose;
+}
+
+// ── Note analysis ──────────────────────────────────────────────────────────
+
+export async function readNoteAnalysis(noteId: string): Promise<NoteAnalysis | null> {
+  await ensureDirs();
+  try {
+    const raw = await fs.readFile(path.join(analysisDir(), `${noteId}.md`), 'utf8');
+    const parsed = matter(raw);
+    const fm = parsed.data as Partial<NoteAnalysis>;
+    return {
+      note_id: fm.note_id || noteId,
+      subject: fm.subject || '',
+      object_people: fm.object_people || [],
+      event_summary: fm.event_summary || parsed.content.trim(),
+      emotion: fm.emotion ?? null,
+      intent: fm.intent || '',
+      candidate_concepts: fm.candidate_concepts || [],
+      evidence: fm.evidence || [],
+      confidence: Number(fm.confidence ?? 0),
+      updated_at: fm.updated_at || new Date(0).toISOString(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function writeNoteAnalysis(analysis: NoteAnalysis): Promise<void> {
+  await ensureDirs();
+  const body = matter.stringify(`${analysis.event_summary || ''}\n`, analysis);
+  await fs.writeFile(path.join(analysisDir(), `${analysis.note_id}.md`), body, 'utf8');
+}
+
+export async function listNoteAnalyses(): Promise<NoteAnalysis[]> {
+  await ensureDirs();
+  const files = await fs.readdir(analysisDir());
+  const analyses = await Promise.all(
+    files
+      .filter((f) => f.endsWith('.md'))
+      .map((f) => readNoteAnalysis(f.replace(/\.md$/, '')))
+  );
+  return analyses.filter((a): a is NoteAnalysis => a !== null);
+}
+
+// ── Review queue ───────────────────────────────────────────────────────────
+
+function reviewFilename(id: string): string {
+  const safe = id.replace(/[/\\:*?"<>|]/g, '_').trim();
+  return `${safe}.md`;
+}
+
+export async function writeReviewItem(item: ReviewItem): Promise<void> {
+  await ensureDirs();
+  const body = matter.stringify(`${item.reason || ''}\n`, item);
+  await fs.writeFile(path.join(reviewQueueDir(), reviewFilename(item.id)), body, 'utf8');
+}
+
+export async function readReviewItem(id: string): Promise<ReviewItem | null> {
+  await ensureDirs();
+  try {
+    const raw = await fs.readFile(path.join(reviewQueueDir(), reviewFilename(id)), 'utf8');
+    const parsed = matter(raw);
+    const fm = parsed.data as Partial<ReviewItem>;
+    return {
+      id: fm.id || id,
+      note_id: fm.note_id || '',
+      type: fm.type || 'concept',
+      suggestion: fm.suggestion || '',
+      reason: fm.reason || parsed.content.trim(),
+      confidence: Number(fm.confidence ?? 0),
+      created_at: fm.created_at || new Date(0).toISOString(),
+      dismissed: Boolean(fm.dismissed),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function listReviewItems(): Promise<ReviewItem[]> {
+  await ensureDirs();
+  const files = await fs.readdir(reviewQueueDir());
+  const items = await Promise.all(
+    files
+      .filter((f) => f.endsWith('.md'))
+      .map((f) => readReviewItem(f.replace(/\.md$/, '')))
+  );
+  return items
+    .filter((item): item is ReviewItem => item !== null)
+    .filter((item) => !item.dismissed)
+    .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+}
+
+export async function deleteReviewItem(id: string): Promise<void> {
+  await fs.rm(path.join(reviewQueueDir(), reviewFilename(id)), { force: true });
+}
+
+export async function deleteReviewItemsForNote(noteId: string): Promise<number> {
+  const items = await listReviewItems();
+  const targets = items.filter((item) => item.note_id === noteId);
+  await Promise.all(targets.map((item) => deleteReviewItem(item.id)));
+  return targets.length;
+}
+
+// ── Note links ─────────────────────────────────────────────────────────────
+
+function noteLinkFilename(id: string): string {
+  const safe = id.replace(/[/\\:*?"<>|]/g, '_').trim();
+  return `${safe}.md`;
+}
+
+export async function writeNoteLink(link: NoteLink): Promise<void> {
+  await ensureDirs();
+  const body = matter.stringify(`${link.reason || ''}\n`, link);
+  await fs.writeFile(path.join(noteLinksDir(), noteLinkFilename(link.id)), body, 'utf8');
+}
+
+export async function readNoteLink(id: string): Promise<NoteLink | null> {
+  await ensureDirs();
+  try {
+    const raw = await fs.readFile(path.join(noteLinksDir(), noteLinkFilename(id)), 'utf8');
+    const parsed = matter(raw);
+    const fm = parsed.data as Partial<NoteLink>;
+    return {
+      id: fm.id || id,
+      from_note_id: fm.from_note_id || '',
+      to_note_id: fm.to_note_id || '',
+      type: fm.type || 'follow_up',
+      reason: fm.reason || parsed.content.trim(),
+      confidence: Number(fm.confidence ?? 0),
+      created_at: fm.created_at || new Date(0).toISOString(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function listNoteLinks(): Promise<NoteLink[]> {
+  await ensureDirs();
+  const files = await fs.readdir(noteLinksDir());
+  const links = await Promise.all(
+    files
+      .filter((f) => f.endsWith('.md'))
+      .map((f) => readNoteLink(f.replace(/\.md$/, '')))
+  );
+  return links
+    .filter((link): link is NoteLink => link !== null)
+    .filter((link) => link.from_note_id && link.to_note_id)
+    .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+}
+
+export async function getNoteLinksForNote(noteId: string): Promise<NoteLink[]> {
+  const links = await listNoteLinks();
+  return links.filter((link) => link.from_note_id === noteId || link.to_note_id === noteId);
+}
+
+export async function deleteNoteLink(id: string): Promise<void> {
+  await fs.rm(path.join(noteLinksDir(), noteLinkFilename(id)), { force: true });
+}
+
+export async function deleteNoteLinksForNote(noteId: string): Promise<number> {
+  const links = await getNoteLinksForNote(noteId);
+  await Promise.all(links.map((link) => deleteNoteLink(link.id)));
+  return links.length;
 }
 
 // ─────────── people ───────────
@@ -247,7 +481,7 @@ function personFilename(name: string): string {
 export async function readPerson(name: string): Promise<Person | null> {
   await ensureDirs();
   try {
-    const raw = await fs.readFile(path.join(PEOPLE_DIR, personFilename(name)), 'utf8');
+    const raw = await fs.readFile(path.join(peopleDir(), personFilename(name)), 'utf8');
     const fm = matter(raw).data as Partial<Person>;
     return {
       name: fm.name || name,
@@ -266,7 +500,7 @@ export async function writePerson(p: Person): Promise<void> {
     note_ids: p.note_ids,
     updated_at: p.updated_at,
   });
-  await fs.writeFile(path.join(PEOPLE_DIR, personFilename(p.name)), body, 'utf8');
+  await fs.writeFile(path.join(peopleDir(), personFilename(p.name)), body, 'utf8');
 }
 
 export async function addNoteIdToPerson(name: string, noteId: string): Promise<void> {
@@ -285,7 +519,7 @@ export async function removeNoteIdFromPerson(name: string, noteId: string): Prom
   if (!existing) return;
   const note_ids = existing.note_ids.filter((id) => id !== noteId);
   if (note_ids.length === 0) {
-    await fs.rm(path.join(PEOPLE_DIR, personFilename(name)), { force: true });
+    await fs.rm(path.join(peopleDir(), personFilename(name)), { force: true });
     return;
   }
   await writePerson({ ...existing, note_ids, updated_at: new Date().toISOString() });
@@ -298,7 +532,7 @@ export async function getPeopleForNote(noteId: string): Promise<Person[]> {
 
 export async function listPeople(): Promise<Person[]> {
   await ensureDirs();
-  const files = await fs.readdir(PEOPLE_DIR);
+  const files = await fs.readdir(peopleDir());
   const people = await Promise.all(
     files
       .filter((f) => f.endsWith('.md'))
@@ -321,13 +555,15 @@ export async function getNotesForPerson(name: string): Promise<Note[]> {
 
 // ── Prompt overrides ────────────────────────────────────────────────────────
 
-const PROMPTS_FILE = path.join(DATA_DIR, 'prompts.json');
+function promptsFile(): string {
+  return path.join(dataDir(), 'prompts.json');
+}
 
 type PromptStore = Record<string, Record<string, string>>;
 
 async function readPromptStore(): Promise<PromptStore> {
   try {
-    const raw = await fs.readFile(PROMPTS_FILE, 'utf-8');
+    const raw = await fs.readFile(promptsFile(), 'utf-8');
     const data = JSON.parse(raw);
     // Migrate old flat format (all-zh) to new per-lang format
     if (!data.zh && !data.en) return { zh: data, en: {} };
@@ -345,5 +581,6 @@ export async function readPromptOverrides(lang: string): Promise<Record<string, 
 export async function writePromptOverrides(lang: string, overrides: Record<string, string>): Promise<void> {
   const store = await readPromptStore();
   store[lang] = overrides;
-  await fs.writeFile(PROMPTS_FILE, JSON.stringify(store, null, 2), 'utf-8');
+  await ensureDirs();
+  await fs.writeFile(promptsFile(), JSON.stringify(store, null, 2), 'utf-8');
 }

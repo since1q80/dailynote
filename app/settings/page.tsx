@@ -23,6 +23,13 @@ export default function SettingsPage() {
   const [importText, setImportText] = useState('');
   const [importing, setImporting] = useState(false);
   const [importedCount, setImportedCount] = useState<number | null>(null);
+  const [desktopConfig, setDesktopConfig] = useState<Awaited<ReturnType<NonNullable<typeof window.dailyNote>['getConfig']>> | null>(null);
+  const [desktopKey, setDesktopKey] = useState('');
+  const [status, setStatus] = useState<Record<string, unknown> | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [purpose, setPurpose] = useState('');
+  const [purposeSaved, setPurposeSaved] = useState(false);
 
   useEffect(() => {
     fetch('/api/prompts')
@@ -35,6 +42,18 @@ export default function SettingsPage() {
         setActiveKey((prev) => prev || (prompts.length > 0 ? prompts[0].key : ''));
       });
   }, [lang]);
+
+  useEffect(() => {
+    fetch('/api/app-status').then((r) => r.json()).then(setStatus).catch(() => {});
+    fetch('/api/purpose')
+      .then((r) => r.json())
+      .then(({ purpose }) => setPurpose(purpose?.content ?? ''))
+      .catch(() => {});
+    window.dailyNote?.getConfig().then((cfg) => {
+      setDesktopConfig(cfg);
+      setDesktopKey(cfg.hasOpenAIKey ? '********' : '');
+    });
+  }, []);
 
   const save = useCallback(
     async (key: string) => {
@@ -80,6 +99,46 @@ export default function SettingsPage() {
   );
 
   const active = prompts.find((p) => p.key === activeKey);
+
+  const saveDesktopConfig = useCallback(async () => {
+    if (!desktopConfig || !window.dailyNote) return;
+    setStatusMessage('保存中...');
+    await window.dailyNote.saveConfig({
+      dataDir: desktopConfig.dataDir,
+      openaiApiKey: desktopKey,
+      httpsProxy: desktopConfig.httpsProxy,
+      globalShortcut: desktopConfig.globalShortcut,
+      hasCompletedOnboarding: desktopConfig.hasCompletedOnboarding,
+    });
+    const nextStatus = await fetch('/api/app-status').then((r) => r.json());
+    setStatus(nextStatus);
+    setStatusMessage('已保存');
+    setTimeout(() => setStatusMessage(null), 1600);
+  }, [desktopConfig, desktopKey]);
+
+  const testOpenAI = useCallback(async () => {
+    setStatusMessage('测试中...');
+    const res = await fetch('/api/app-status/test-openai', { method: 'POST' });
+    const data = await res.json();
+    setStatusMessage(data.ok ? `连接成功，模型 ${data.modelCount} 个` : `${data.error} ${data.hint ?? ''}`);
+  }, []);
+
+  const savePurpose = useCallback(async () => {
+    await fetch('/api/purpose', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: purpose }),
+    });
+    setPurposeSaved(true);
+    setTimeout(() => setPurposeSaved(false), 1800);
+  }, [purpose]);
+
+  const backup = useCallback(async () => {
+    setStatusMessage('备份中...');
+    const res = await fetch('/api/backup', { method: 'POST' });
+    const data = await res.json();
+    setStatusMessage(data.ok ? `已备份到 ${data.path}` : `备份失败：${data.error}`);
+  }, []);
 
   const importNotes = useCallback(async () => {
     const text = importText.trim();
@@ -134,6 +193,117 @@ export default function SettingsPage() {
       <div className="mb-6 rounded-2xl border border-line bg-paper p-4">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
+            <p className="font-medium">{t('settings.purpose')}</p>
+            <p className="mt-1 text-[12px] text-ink-faint">{t('settings.purposeHelp')}</p>
+          </div>
+          <button
+            onClick={savePurpose}
+            className="rounded-lg bg-accent px-4 py-1.5 text-[13px] text-white transition hover:bg-accent-dark"
+          >
+            {purposeSaved ? t('common.saved') : t('common.save')}
+          </button>
+        </div>
+        <textarea
+          value={purpose}
+          onChange={(e) => setPurpose(e.target.value)}
+          placeholder={t('settings.purposePlaceholder')}
+          className="h-24 w-full rounded-xl border border-line bg-canvas p-3 text-[13px] leading-6 outline-none placeholder:text-ink-ghost focus:border-accent/40"
+        />
+      </div>
+
+      <div className="mb-6 rounded-2xl border border-line bg-paper p-4">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <p className="font-medium">Mac App</p>
+            <p className="mt-1 text-[12px] text-ink-faint">
+              {status?.desktop ? '正在以 Mac app 模式运行' : '当前是浏览器模式，Mac app 配置会在桌面版中启用'}
+            </p>
+          </div>
+          <button
+            onClick={testOpenAI}
+            className="rounded-lg border border-line px-3 py-1.5 text-[12px] text-ink-soft transition hover:border-accent/40"
+          >
+            测试 AI
+          </button>
+        </div>
+
+        {desktopConfig ? (
+          <div className="space-y-3">
+            <div>
+              <label className="mb-1 block text-[11px] text-ink-ghost">数据目录</label>
+              <div className="flex gap-2">
+                <input
+                  value={desktopConfig.dataDir}
+                  onChange={(e) => setDesktopConfig({ ...desktopConfig, dataDir: e.target.value })}
+                  className="min-w-0 flex-1 rounded-xl border border-line bg-canvas px-3 py-2 text-[13px] outline-none"
+                />
+                <button
+                  onClick={async () => {
+                    const dir = await window.dailyNote?.chooseDataDir();
+                    if (dir) setDesktopConfig({ ...desktopConfig, dataDir: dir });
+                  }}
+                  className="rounded-xl border border-line px-3 py-2 text-[12px] text-ink-soft"
+                >
+                  选择
+                </button>
+                <button
+                  onClick={() => window.dailyNote?.openDataDir()}
+                  className="rounded-xl border border-line px-3 py-2 text-[12px] text-ink-soft"
+                >
+                  打开
+                </button>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-[11px] text-ink-ghost">OpenAI API key</label>
+                <input
+                  value={desktopKey}
+                  onChange={(e) => setDesktopKey(e.target.value)}
+                  type="password"
+                  className="w-full rounded-xl border border-line bg-canvas px-3 py-2 text-[13px] outline-none"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-[11px] text-ink-ghost">HTTPS_PROXY</label>
+                <input
+                  value={desktopConfig.httpsProxy}
+                  onChange={(e) => setDesktopConfig({ ...desktopConfig, httpsProxy: e.target.value })}
+                  placeholder="http://127.0.0.1:1087"
+                  className="w-full rounded-xl border border-line bg-canvas px-3 py-2 text-[13px] outline-none"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] text-ink-ghost">全局快捷键</label>
+              <input
+                value={desktopConfig.globalShortcut}
+                onChange={(e) => setDesktopConfig({ ...desktopConfig, globalShortcut: e.target.value })}
+                className="w-full rounded-xl border border-line bg-canvas px-3 py-2 text-[13px] outline-none"
+              />
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <p className="min-w-0 truncate text-[12px] text-ink-faint">{statusMessage}</p>
+              <div className="flex gap-2">
+                <button onClick={backup} className="rounded-lg border border-line px-3 py-1.5 text-[12px] text-ink-soft">
+                  备份
+                </button>
+                <button onClick={saveDesktopConfig} className="rounded-lg bg-accent px-4 py-1.5 text-[13px] text-white">
+                  保存 Mac 设置
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <p className="text-[12px] leading-6 text-ink-faint">
+            打开 Mac app 后，这里会显示数据目录、OpenAI key、代理和快捷键设置。
+          </p>
+        )}
+      </div>
+
+      <div className="mb-6 rounded-2xl border border-line bg-paper p-4">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
             <p className="font-medium">{t('settings.import')}</p>
             <p className="mt-1 text-[12px] text-ink-faint">{t('settings.importHelp')}</p>
           </div>
@@ -157,9 +327,18 @@ export default function SettingsPage() {
         />
       </div>
 
-      {prompts.length === 0 ? (
+      <div className="mb-4">
+        <button
+          onClick={() => setAdvancedOpen((v) => !v)}
+          className="rounded-lg px-2.5 py-1.5 text-[12px] text-ink-ghost transition hover:bg-canvas hover:text-ink-faint"
+        >
+          {advancedOpen ? '收起高级设置' : '高级设置：Prompts'}
+        </button>
+      </div>
+
+      {advancedOpen && prompts.length === 0 ? (
         <p className="text-sm text-ink-faint">{t('common.loading')}</p>
-      ) : (
+      ) : advancedOpen ? (
         <div className="flex gap-6">
           {/* Sidebar */}
           <aside className="w-28 shrink-0">
@@ -235,7 +414,7 @@ export default function SettingsPage() {
             </div>
           )}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
