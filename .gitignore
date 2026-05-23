@@ -1,0 +1,15 @@
+node_modules/
+.next/
+dist/
+.env.local
+.env
+*.log
+.DS_Store
+tsconfig.tsbuildinfo
+*.tsbuildinfo
+.claude/
+reviews/
+
+# 默认情况下把数据排除（防止推到公共仓库）
+# 如果你想用 git 同步自己的笔记，就把下面这行删掉
+/data/

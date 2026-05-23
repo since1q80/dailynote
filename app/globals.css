@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  background: #fefdfa;
+  color: #1f1e1b;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+textarea {
+  resize: none;
+}
+
+/* 让 cmd+enter 提交按钮有个微妙的轻响 */
+button:active:not(:disabled) {
+  transform: scale(0.98);
+}
