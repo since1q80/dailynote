@@ -211,6 +211,34 @@ const dict: Record<string, Record<Lang, string>> = {
   'settings.advancedOpen': { zh: '高级设置：Prompts', en: 'Advanced settings: Prompts' },
   'settings.advancedClose': { zh: '收起高级设置', en: 'Collapse advanced settings' },
 
+  // Onboarding
+  'onboarding.title': { zh: '先把日常记录变简单', en: 'Make daily notes simple first' },
+  'onboarding.subtitle': {
+    zh: '选择数据保存位置和 AI 提供商。之后你只需要打开应用写下想法，整理会在后台发生。',
+    en: 'Choose where to store your data and which AI provider to use. After that, just write. DailyNote organizes in the background.',
+  },
+  'onboarding.demoTitle': { zh: '先体验一遍 DailyNote', en: 'Try DailyNote first' },
+  'onboarding.demoHelp': {
+    zh: '不想马上配置 API key 的话，可以先载入一组示例笔记。你会直接看到首页回顾、自动主题、人物和相关旧想法。',
+    en: 'Not ready to configure an API key? Load a demo notebook and immediately see the Daily Brief, topics, people, and related old thoughts.',
+  },
+  'onboarding.tryDemo': { zh: '试用 Demo', en: 'Try demo' },
+  'onboarding.demoStarting': { zh: '准备 Demo...', en: 'Preparing demo...' },
+  'onboarding.demoFailed': { zh: 'Demo 数据生成失败。', en: 'Failed to generate demo notes.' },
+  'onboarding.dataLocation': { zh: '数据保存位置', en: 'Data location' },
+  'onboarding.aiProvider': { zh: 'AI 提供商', en: 'AI provider' },
+  'onboarding.customBaseUrl': { zh: '自定义地址（可选）', en: 'Custom base URL (optional)' },
+  'onboarding.proxy': { zh: 'HTTPS_PROXY（可选）', en: 'HTTPS_PROXY (optional)' },
+  'onboarding.testConnection': { zh: '测试连接', en: 'Test connection' },
+  'onboarding.connectionOk': { zh: '连接成功，检测到 {n} 个模型。', en: 'Connected. Found {n} models.' },
+  'onboarding.startUsing': { zh: '开始使用', en: 'Start using DailyNote' },
+  'onboarding.optionalKey': { zh: '可留空', en: 'Optional' },
+  'onboarding.apiKeyOptional': { zh: 'API key（可选）', en: 'API key (optional)' },
+  'onboarding.desktopOnly': {
+    zh: '首次启动向导只在 Mac app 中可用。当前看起来是在普通浏览器里打开。',
+    en: 'The first-run setup is only available in the Mac app. It looks like this is open in a regular browser.',
+  },
+
   // Review queue
   'review.title': { zh: '待确认', en: 'Review' },
   'review.empty': { zh: '没有需要确认的 AI 判断。', en: 'No AI suggestions need review.' },
