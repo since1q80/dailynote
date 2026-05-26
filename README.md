@@ -6,7 +6,7 @@ You write freely. DailyNote turns scattered notes into themes, tags, people, rel
 
 It is not another system that asks you to maintain folders, tags, backlinks, and dashboards. DailyNote acts more like a quiet research assistant: it reads what you wrote, finds recurring patterns, connects old thoughts, and gives you a useful review when you come back.
 
-![DailyNote Promo](./dailynote-promo.png)
+![DailyNote Promo](./dailynote-promo-en.png)
 
 ## Why Try It
 
